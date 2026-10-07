@@ -1,14 +1,18 @@
-# TEACH ME
+# Teach Me
 
-A Next.js starter project for the Teach Me AI-powered learning supervision product.
+Teach Me is a Phase 1 prototype for an AI-supported learning supervision experience. It helps learners choose a topic, prepare a focused session, ask lesson-related questions, and reflect on their progress.
 
-## Included
+## Phase 1 experience
 
-- Next.js + TypeScript + Tailwind setup
-- Reusable UI primitives: Button, Input, Card, Badge
-- App shell and login page
-- Feature-based folder structure focused on auth and dashboard
-- Design tokens aligned to the Teach Me brand system
+- Email-based demo profile and interest selection
+- Personalized learning dashboard and lesson discovery
+- Lesson details and focus-session preparation
+- Focus timer, gentle distraction reminders, and a contextual Q&A demo
+- Session completion report and session history
+
+## Prototype limitations
+
+This repository does not include an authentication provider, lesson video hosting, camera-based monitoring, or an AI service. Sign-in and learning data are simulated and stored in the browser's `localStorage`; the Q&A panel uses sample responses and does not send messages to an AI. Focus reminders are manually triggered and do not access the camera.
 
 ## Run locally
 
@@ -17,4 +21,4 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000. Run `npm run type-check` and `npm run build` to validate the app.
