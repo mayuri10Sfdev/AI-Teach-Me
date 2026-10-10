@@ -45,10 +45,11 @@ export default function PrepareSessionPage() {
           </div>
           <div className="mt-6">
             <h3 className="text-sm font-semibold">How long would you like to focus?</h3>
+            <p className="mt-1 text-xs text-secondaryText">This is your focus timer; you can choose a shorter or longer session than the video.</p>
             <div className="mt-3 flex flex-wrap gap-2">{[15, 25, 40].map((mins) => <button key={mins} onClick={() => setDuration(mins)} aria-pressed={duration === mins} className={`min-w-[82px] rounded-lg border px-4 py-2.5 text-sm font-semibold ${duration === mins ? 'border-[#35735f] bg-[#eef4ef] text-[#315f50]' : 'border-[#e5eae5] text-[#627067]'}`}>{mins} min</button>)}</div>
           </div>
           <div className="mt-6 flex items-start justify-between gap-4 rounded-xl border border-[#e6ebe6] bg-[#fafbf9] p-4">
-            <div className="flex gap-3"><span className="mt-0.5 text-primary"><Icon name="target" size={19} /></span><div><p className="text-xs font-semibold">Focus check-ins</p><p className="mt-1 max-w-md text-[11px] leading-5 text-secondaryText">Optional gentle reminders can help you return to your intention. This demo does not use your camera.</p></div></div>
+            <div className="flex gap-3"><span className="mt-0.5 text-primary"><Icon name="target" size={19} /></span><div><p className="text-xs font-semibold">Camera-based focus check-ins (optional)</p><p className="mt-1 max-w-md text-[11px] leading-5 text-secondaryText">With your permission, the browser checks whether your face is visible and whether your head turns significantly to either side. Camera frames stay on your device and are not recorded or uploaded. This can prompt a gentle pause, but it is not a measure of attention.</p></div></div>
             <button role="switch" aria-checked={focusRemindersOn} onClick={() => setFocusRemindersOn((value) => !value)} className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${focusRemindersOn ? 'bg-primary' : 'bg-[#dbe2dc]'}`} aria-label="Toggle optional focus reminders"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${focusRemindersOn ? 'left-6' : 'left-1'}`} /></button>
           </div>
           <div className="mt-6 flex flex-col-reverse items-center justify-between gap-4 border-t border-[#edf0ed] pt-5 sm:flex-row">

@@ -98,6 +98,14 @@ export function LoginForm() {
     setMessage('');
   }
 
+  function getAuthErrorMessage(error: unknown) {
+    const message = getErrorMessage(error);
+    if (/unsupported phone provider|phone provider.*not enabled|sms provider.*not configured/i.test(message)) {
+      return 'Phone OTP is not enabled in this Supabase project. In Supabase, open Authentication → Providers → Phone, enable phone sign-in, and configure an SMS provider. You can choose Email to start registration, but phone verification still requires this setup.';
+    }
+    return message;
+  }
+
   async function requestOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearFeedback();
@@ -139,7 +147,14 @@ export function LoginForm() {
         setMessage(`We sent a verification code to ${destination}.`);
       }
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      const errorMessage = getErrorMessage(requestError);
+      if (/unsupported phone provider|phone provider.*not enabled|sms provider.*not configured/i.test(errorMessage)) {
+        setError(getAuthErrorMessage(requestError));
+      } else if (!isCreatingAccount && /signups not allowed for otp|user not found|phone number not found|email not found/i.test(errorMessage)) {
+        setError('No account was found for this contact, or OTP sign-in is disabled. If you are new, choose “Create an account”. If you already registered, check the Supabase Auth provider settings.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -200,7 +215,7 @@ export function LoginForm() {
 
       router.push('/onboarding/interests');
     } catch (verifyError) {
-      setError(getErrorMessage(verifyError));
+      setError(getAuthErrorMessage(verifyError));
     } finally {
       setIsSubmitting(false);
     }

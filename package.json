@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.0",
     "@supabase/supabase-js": "^2.117.3",
     "clsx": "^2.1.1",
     "next": "14.2.15",

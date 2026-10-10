@@ -8,6 +8,7 @@ export interface Video {
   difficulty: Difficulty;
   duration: number;
   skill: string;
+  youtubeVideoId: string;
   instructor?: string;
   thumbnail?: string;
 }

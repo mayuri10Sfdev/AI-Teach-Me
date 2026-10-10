@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { FocusMonitor } from '@/components/learning/FocusMonitor';
 import { Icon } from '@/components/ui/Icon';
+import { YouTubePlayer } from '@/components/learning/YouTubePlayer';
 import { VIDEOS } from '@/lib/constants/videos';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getErrorMessage, saveCompletedSession, type ChatMessage, type SessionRecord } from '@/lib/supabase/learning';
@@ -29,6 +31,7 @@ export default function StudySessionPage() {
   const [saveError, setSaveError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
+  const [cameraMonitorEnabled, setCameraMonitorEnabled] = useState(false);
 
   useEffect(() => {
     if (!video) {
@@ -39,6 +42,7 @@ export default function StudySessionPage() {
     setDuration(savedDuration);
     setSecondsLeft(savedDuration * 60);
     setIntention(window.localStorage.getItem('teach-me-intention') || 'Understand the key ideas');
+    setCameraMonitorEnabled(window.localStorage.getItem('teach-me-focus-reminders') === 'on');
   }, [router, video]);
 
   useEffect(() => {
@@ -128,16 +132,12 @@ export default function StudySessionPage() {
       </div>
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,.8fr)]">
         <div className="space-y-4">
-          <section className="learning-screen">
-            <div className="learning-orbit" />
-            <div className="relative z-[1] max-w-md px-7 text-center text-white">
-              <div className="mx-auto grid h-[68px] w-[68px] place-items-center rounded-2xl border border-white/15 bg-white/10 text-[#c6dfce]"><Icon name="video" size={30} /></div>
-              <p className="mt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-[#b8d0c0]">YOUR LEARNING SPACE</p>
-              <h2 className="mt-2 text-xl font-semibold">{video.title}</h2>
-              <p className="mt-2 text-xs text-white/65">The video player is not connected in this prototype. Your session timer, notes, and focus tools are ready to try.</p>
-            </div>
-            <div className="absolute bottom-4 left-4 right-4 z-[1] flex items-center justify-between gap-3 text-[10px] text-white/70"><span>Lesson · {video.instructor}</span><span>{formatTime(secondsLeft)} remaining</span></div>
+          <section aria-label={`Video lesson: ${video.title}`}>
+            <YouTubePlayer video={video} />
+            <p className="mt-2 text-right text-[10px] text-secondaryText">Lesson by {video.instructor} · {formatTime(secondsLeft)} remaining in your focus timer</p>
           </section>
+
+          {cameraMonitorEnabled && <FocusMonitor paused={paused} onConcern={markDistracted} />}
 
           {warningVisible && <div role="status" className="flex items-start gap-3 rounded-xl border border-[#f1e2cb] bg-[#fffaf2] p-4"><span className="mt-0.5 text-[#bd823d]"><Icon name="sparkle" size={17} /></span><div className="flex-1"><p className="text-xs font-semibold text-[#604b32]">It happens. Let’s gently come back.</p><p className="mt-1 text-xs leading-5 text-[#786750]">Take one slow breath, then return to your intention: “{intention}.”</p></div><button onClick={() => { setWarningVisible(false); setPaused(false); }} className="rounded-lg bg-[#f2e7d6] px-3 py-2 text-xs font-semibold text-[#765a35]">I’m ready</button></div>}
 
