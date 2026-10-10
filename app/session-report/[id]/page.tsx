@@ -5,41 +5,47 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Icon } from '@/components/ui/Icon';
-
-type SessionRecord = {
-  id: string;
-  videoId: string;
-  title: string;
-  intention: string;
-  focusMinutes: number;
-  distractions: number;
-  questions: number;
-  completedAt: string;
-};
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getCompletedSession, getErrorMessage, type SessionRecord } from '@/lib/supabase/learning';
 
 export default function SessionReportPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<SessionRecord | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('teach-me-sessions');
-    if (!saved) {
-      router.replace('/sessions');
-      return;
+    async function loadSession() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+        const found = await getCompletedSession(user.id, params.id);
+        if (found) setSession(found);
+        else router.replace('/sessions');
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+      }
     }
-    const found = (JSON.parse(saved) as SessionRecord[]).find((item) => item.id === params.id);
-    if (found) setSession(found);
-    else router.replace('/sessions');
+    void loadSession();
   }, [params.id, router]);
 
-  if (!session) return null;
+  if (!session) {
+    return error ? (
+      <AppShell><p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{error}</p></AppShell>
+    ) : null;
+  }
 
   const completed = new Date(session.completedAt);
   const completedDate = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(completed);
 
   return (
     <AppShell>
+      {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{error}</p>}
       <div className="mx-auto max-w-3xl">
         <div className="text-center">
           <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#eaf1ff] text-primary"><Icon name="check" size={27} /></span>

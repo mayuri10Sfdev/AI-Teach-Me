@@ -4,27 +4,29 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Icon } from '@/components/ui/Icon';
-
-type SessionRecord = {
-  id: string;
-  videoId: string;
-  title: string;
-  intention: string;
-  focusMinutes: number;
-  distractions: number;
-  questions: number;
-  completedAt: string;
-};
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getCompletedSessions, getErrorMessage, type SessionRecord } from '@/lib/supabase/learning';
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [error, setError] = useState('');
   useEffect(() => {
-    const saved = window.localStorage.getItem('teach-me-sessions');
-    if (saved) setSessions(JSON.parse(saved) as SessionRecord[]);
+    async function loadSessions() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (user) setSessions(await getCompletedSessions(user.id));
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+      }
+    }
+    void loadSessions();
   }, []);
 
   return (
     <AppShell>
+      {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{error}</p>}
       <p className="eyebrow">YOUR PROGRESS, AT YOUR PACE</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-[-1px]">My learning sessions</h1>
       <p className="mt-2 text-sm text-secondaryText">Every session is a little time you made for yourself.</p>

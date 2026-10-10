@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/supabase/learning';
 
 const navigation: { href: string; label: string; icon: IconName }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -13,12 +15,44 @@ const navigation: { href: string; label: string; icon: IconName }[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [name, setName] = useState('Learner');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const storedName = window.localStorage.getItem('teach-me-name');
-    if (storedName) setName(storedName);
-  }, []);
+    async function loadProfile() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (profileError) throw profileError;
+        const fullName = profile?.full_name || user.user_metadata.full_name || user.email?.split('@')[0] || 'Learner';
+        setName(String(fullName).split(' ')[0]);
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+      }
+    }
+    void loadProfile();
+  }, [router]);
+
+  async function signOut() {
+    setError('');
+    const { error: signOutError } = await getSupabaseClient().auth.signOut();
+    if (signOutError) {
+      setError(getErrorMessage(signOutError));
+      return;
+    }
+    router.push('/login');
+  }
 
   return (
     <div className="min-h-screen bg-[#f3f7fc]">
@@ -57,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="profile-row">
             <span className="avatar">{name.charAt(0).toUpperCase()}</span>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{name}</span><span className="block text-xs text-secondaryText">Learner</span></span>
-            <Link aria-label="Sign out" title="Sign out" href="/login" onClick={() => window.localStorage.removeItem('teach-me-name')} className="text-secondaryText hover:text-primary"><Icon name="logout" size={16} /></Link>
+            <button type="button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()} className="text-secondaryText hover:text-primary"><Icon name="logout" size={16} /></button>
           </div>
         </div>
       </aside>
@@ -72,7 +106,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-secondaryText">⌄</span>
           </div>
         </header>
-        <main className="app-content">{children}</main>
+        <main className="app-content">
+          {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{error}</p>}
+          {children}
+        </main>
       </div>
 
       <nav className="mobile-nav" aria-label="Main navigation">

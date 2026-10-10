@@ -4,19 +4,55 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import { INTERESTS } from '@/lib/constants';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/supabase/learning';
+
+type Topic = { id: string; name: string };
 
 export default function InterestsPage() {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [name, setName] = useState('there');
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const storedInterests = window.localStorage.getItem('teach-me-interests');
-    if (storedInterests) setSelected(JSON.parse(storedInterests) as string[]);
-    const storedName = window.localStorage.getItem('teach-me-name');
-    if (storedName) setName(storedName.split(' ')[0]);
-  }, []);
+    async function loadProfile() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+
+        const [{ data: topicRows, error: topicsError }, { data: selectedRows, error: selectedError }, { data: profile, error: profileError }] = await Promise.all([
+          supabase.from('topics').select('id, name').order('name'),
+          supabase.from('user_topics').select('topic_id').eq('user_id', user.id),
+          supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
+        ]);
+        if (topicsError) throw topicsError;
+        if (selectedError) throw selectedError;
+        if (profileError) throw profileError;
+
+        const availableTopics = (topicRows ?? []) as Topic[];
+        setTopics(availableTopics);
+        const topicNames = new Map(availableTopics.map((topic) => [topic.id, topic.name]));
+        setSelected((selectedRows ?? []).flatMap((row) => {
+          const topicName = topicNames.get(row.topic_id);
+          return topicName ? [topicName] : [];
+        }));
+        const fullName = profile?.full_name || user.user_metadata.full_name || user.email?.split('@')[0] || 'there';
+        setName(String(fullName).split(' ')[0]);
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+      }
+    }
+
+    void loadProfile();
+  }, [router]);
 
   function toggleInterest(interest: string) {
     setSelected((current) => current.includes(interest)
@@ -24,10 +60,32 @@ export default function InterestsPage() {
       : [...current, interest]);
   }
 
-  function continueToDashboard() {
+  async function continueToDashboard() {
     if (!selected.length) return;
-    window.localStorage.setItem('teach-me-interests', JSON.stringify(selected));
-    router.push('/dashboard');
+    setError('');
+    setIsSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+      const { error: deleteError } = await supabase.from('user_topics').delete().eq('user_id', user.id);
+      if (deleteError) throw deleteError;
+      const topicIds = topics.filter((topic) => selected.includes(topic.name)).map((topic) => ({
+        user_id: user.id,
+        topic_id: topic.id,
+      }));
+      const { error: insertError } = await supabase.from('user_topics').insert(topicIds);
+      if (insertError) throw insertError;
+      router.push('/dashboard');
+    } catch (saveError) {
+      setError(getErrorMessage(saveError));
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -39,7 +97,8 @@ export default function InterestsPage() {
         <h1 className="mt-3 text-3xl font-semibold tracking-[-1px]">What are you curious about, {name}?</h1>
         <p className="mt-3 max-w-xl text-sm leading-6 text-secondaryText">Choose a few topics you’d like to explore. We’ll use them to shape your recommendations — you can always change these later.</p>
         <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {INTERESTS.map((interest) => {
+          {topics.map((topic) => {
+            const interest = topic.name;
             const active = selected.includes(interest);
             return (
               <button key={interest} type="button" aria-pressed={active} onClick={() => toggleInterest(interest)}
@@ -52,9 +111,12 @@ export default function InterestsPage() {
         </div>
         <div className="mt-8 flex flex-col-reverse items-center justify-between gap-4 border-t border-[#edf1f7] pt-6 sm:flex-row">
           <p className="text-xs text-secondaryText" aria-live="polite">{selected.length} {selected.length === 1 ? 'topic' : 'topics'} selected</p>
-          <button type="button" onClick={continueToDashboard} disabled={!selected.length} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1554d3] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto">
-            Build my learning space <Icon name="arrow" size={17} />
-          </button>
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            {error && <p role="alert" className="max-w-sm text-xs text-error">{error}</p>}
+            <button type="button" onClick={continueToDashboard} disabled={!selected.length || isSaving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1554d3] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto">
+              {isSaving ? 'Saving…' : 'Build my learning space'} <Icon name="arrow" size={17} />
+            </button>
+          </div>
         </div>
       </section>
     </main>
