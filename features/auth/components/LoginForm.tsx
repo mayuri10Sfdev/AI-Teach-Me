@@ -9,6 +9,58 @@ import { getErrorMessage } from '@/lib/supabase/learning';
 type OtpChannel = 'email' | 'phone';
 type AuthStep = 'details' | 'login-otp' | 'signup-first-otp' | 'signup-second-otp';
 
+const countries = [
+  { name: 'India', dialCode: '+91' },
+  { name: 'United States', dialCode: '+1' },
+  { name: 'United Kingdom', dialCode: '+44' },
+  { name: 'Canada', dialCode: '+1' },
+  { name: 'Australia', dialCode: '+61' },
+  { name: 'New Zealand', dialCode: '+64' },
+  { name: 'United Arab Emirates', dialCode: '+971' },
+  { name: 'Singapore', dialCode: '+65' },
+  { name: 'Ireland', dialCode: '+353' },
+  { name: 'Germany', dialCode: '+49' },
+  { name: 'France', dialCode: '+33' },
+  { name: 'Italy', dialCode: '+39' },
+  { name: 'Spain', dialCode: '+34' },
+  { name: 'Netherlands', dialCode: '+31' },
+  { name: 'Switzerland', dialCode: '+41' },
+  { name: 'Sweden', dialCode: '+46' },
+  { name: 'Norway', dialCode: '+47' },
+  { name: 'Denmark', dialCode: '+45' },
+  { name: 'Finland', dialCode: '+358' },
+  { name: 'Belgium', dialCode: '+32' },
+  { name: 'Austria', dialCode: '+43' },
+  { name: 'Portugal', dialCode: '+351' },
+  { name: 'Poland', dialCode: '+48' },
+  { name: 'Czechia', dialCode: '+420' },
+  { name: 'Greece', dialCode: '+30' },
+  { name: 'Turkey', dialCode: '+90' },
+  { name: 'Japan', dialCode: '+81' },
+  { name: 'South Korea', dialCode: '+82' },
+  { name: 'China', dialCode: '+86' },
+  { name: 'Hong Kong', dialCode: '+852' },
+  { name: 'Malaysia', dialCode: '+60' },
+  { name: 'Indonesia', dialCode: '+62' },
+  { name: 'Thailand', dialCode: '+66' },
+  { name: 'Philippines', dialCode: '+63' },
+  { name: 'Pakistan', dialCode: '+92' },
+  { name: 'Bangladesh', dialCode: '+880' },
+  { name: 'Sri Lanka', dialCode: '+94' },
+  { name: 'Nepal', dialCode: '+977' },
+  { name: 'South Africa', dialCode: '+27' },
+  { name: 'Nigeria', dialCode: '+234' },
+  { name: 'Kenya', dialCode: '+254' },
+  { name: 'Egypt', dialCode: '+20' },
+  { name: 'Saudi Arabia', dialCode: '+966' },
+  { name: 'Israel', dialCode: '+972' },
+  { name: 'Brazil', dialCode: '+55' },
+  { name: 'Mexico', dialCode: '+52' },
+  { name: 'Argentina', dialCode: '+54' },
+  { name: 'Chile', dialCode: '+56' },
+  { name: 'Colombia', dialCode: '+57' },
+] as const;
+
 export function LoginForm() {
   const router = useRouter();
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -17,6 +69,7 @@ export function LoginForm() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [countryDialCode, setCountryDialCode] = useState('+91');
   const [channel, setChannel] = useState<OtpChannel>('email');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
@@ -29,7 +82,16 @@ export function LoginForm() {
   const otpChannel: OtpChannel = isSecondarySignupOtp
     ? channel === 'email' ? 'phone' : 'email'
     : channel;
-  const otpDestination = otpChannel === 'email' ? email : phone;
+  const normalizedPhone = `${countryDialCode}${phone.replace(/\D/g, '').replace(/^0+/, '')}`;
+  const otpDestination = otpChannel === 'email' ? email : normalizedPhone;
+
+  function requirePhoneNumber() {
+    const nationalNumber = phone.replace(/\D/g, '').replace(/^0+/, '');
+    if (nationalNumber.length < 7 || nationalNumber.length > 14) {
+      throw new Error('Enter a valid phone number for the selected country.');
+    }
+    return `${countryDialCode}${nationalNumber}`;
+  }
 
   function clearFeedback() {
     setError('');
@@ -47,11 +109,9 @@ export function LoginForm() {
         if (!firstName.trim() || !lastName.trim()) {
           throw new Error('Enter your first and last name.');
         }
-        if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
-          throw new Error('Enter your phone number in international format, for example +14155552671.');
-        }
+        const fullPhoneNumber = requirePhoneNumber();
 
-        const credentials = channel === 'email' ? { email: email.trim() } : { phone: phone.trim() };
+        const credentials = channel === 'email' ? { email: email.trim() } : { phone: fullPhoneNumber };
         const { error: otpError } = await supabase.auth.signInWithOtp({
           ...credentials,
           options: {
@@ -61,7 +121,7 @@ export function LoginForm() {
               last_name: lastName.trim(),
               full_name: fullName,
               email: email.trim().toLowerCase(),
-              phone: phone.trim(),
+              phone: fullPhoneNumber,
             },
           },
         });
@@ -69,10 +129,7 @@ export function LoginForm() {
         setStep('signup-first-otp');
         setMessage(`We sent a verification code to ${channel === 'email' ? email : phone}.`);
       } else {
-        const destination = channel === 'email' ? email.trim() : phone.trim();
-        if (channel === 'phone' && !/^\+[1-9]\d{7,14}$/.test(destination)) {
-          throw new Error('Enter your phone number in international format, for example +14155552671.');
-        }
+        const destination = channel === 'email' ? email.trim() : requirePhoneNumber();
         const { error: otpError } = await supabase.auth.signInWithOtp({
           ...(channel === 'email' ? { email: destination } : { phone: destination }),
           options: { shouldCreateUser: false },
@@ -99,7 +156,7 @@ export function LoginForm() {
         const { error: verifyError } = await supabase.auth.verifyOtp({
           ...(otpChannel === 'email'
             ? { email: email.trim(), token: otp.trim(), type: 'email_change' as const }
-            : { phone: phone.trim(), token: otp.trim(), type: 'phone_change' as const }),
+            : { phone: normalizedPhone, token: otp.trim(), type: 'phone_change' as const }),
         });
         if (verifyError) throw verifyError;
 
@@ -124,13 +181,13 @@ export function LoginForm() {
       const { error: verifyError } = await supabase.auth.verifyOtp({
         ...(channel === 'email'
           ? { email: email.trim(), token: otp.trim(), type: 'email' as const }
-          : { phone: phone.trim(), token: otp.trim(), type: 'sms' as const }),
+          : { phone: normalizedPhone, token: otp.trim(), type: 'sms' as const }),
       });
       if (verifyError) throw verifyError;
 
       if (step === 'signup-first-otp') {
         const { error: linkError } = channel === 'email'
-          ? await supabase.auth.updateUser({ phone: phone.trim() })
+          ? await supabase.auth.updateUser({ phone: normalizedPhone })
           : await supabase.auth.updateUser({ email: email.trim().toLowerCase() });
         if (linkError) throw linkError;
 
@@ -191,16 +248,36 @@ export function LoginForm() {
             />
           )}
           {(isCreatingAccount || channel === 'phone') && (
-            <Input
-              label="Phone number"
-              type="tel"
-              autoComplete="tel"
-              required
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="+14155552671"
-              helperText={isCreatingAccount ? 'Include your country code. Both phone and email will be verified.' : 'Include your country code, for example +14155552671.'}
-            />
+            <div className="w-full">
+              <label htmlFor="phone-number" className="mb-2 block text-label font-medium text-ink">Phone number</label>
+              <div className="flex gap-2">
+                <select
+                  aria-label="Country calling code"
+                  value={countryDialCode}
+                  onChange={(event) => setCountryDialCode(event.target.value)}
+                  className="max-w-[48%] rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {countries.map((country) => (
+                    <option key={`${country.name}-${country.dialCode}`} value={country.dialCode}>
+                      {country.name} ({country.dialCode})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  id="phone-number"
+                  type="tel"
+                  autoComplete="tel-national"
+                  required
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value.replace(/[^\d\s()-]/g, ''))}
+                  placeholder="Phone number"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-body text-ink placeholder:text-secondaryText focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <p className="mt-1 text-caption text-secondaryText">
+                {isCreatingAccount ? 'Both your phone number and email will be verified.' : `We’ll send your sign-in code to ${normalizedPhone}.`}
+              </p>
+            </div>
           )}
           <fieldset className="space-y-2">
             <legend className="mb-2 text-sm font-medium text-ink">
