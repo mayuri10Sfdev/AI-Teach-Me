@@ -10,17 +10,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: '#0F172A',
-        primary: '#2563EB',
-        focus: '#22C55E',
-        background: '#F8FAFC',
+        ink: '#14213D',
+        primary: '#2164EE',
+        focus: '#36B985',
+        background: '#F3F7FC',
         surface: '#FFFFFF',
-        'surface-alt': '#F1F5F9',
-        secondaryText: '#64748B',
-        border: '#E2E8F0',
-        warning: '#F59E0B',
-        error: '#EF4444',
-        success: '#16A34A'
+        'surface-alt': '#EFF5FD',
+        secondaryText: '#657692',
+        border: '#E2EAF5',
+        warning: '#E99B2E',
+        error: '#DC5E66',
+        success: '#13A579'
       },
       boxShadow: {
         soft: '0 8px 24px rgba(15, 23, 42, 0.08)',
