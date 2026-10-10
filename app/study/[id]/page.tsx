@@ -6,18 +6,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Icon } from '@/components/ui/Icon';
 import { VIDEOS } from '@/lib/constants/videos';
-
-type ChatMessage = { question: string; answer: string };
-type SessionRecord = {
-  id: string;
-  videoId: string;
-  title: string;
-  intention: string;
-  focusMinutes: number;
-  distractions: number;
-  questions: number;
-  completedAt: string;
-};
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getErrorMessage, saveCompletedSession, type ChatMessage, type SessionRecord } from '@/lib/supabase/learning';
 
 function formatTime(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -43,6 +33,8 @@ export default function StudySessionPage() {
   const [distractions, setDistractions] = useState(0);
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!video) {
@@ -72,21 +64,30 @@ export default function StudySessionPage() {
     setQuestion('');
   }
 
-  function finishSession() {
-    const record: SessionRecord = {
-      id: `${currentVideo.id}-${Date.now()}`,
+  async function finishSession() {
+    setSaveError('');
+    setIsSaving(true);
+    const record: Omit<SessionRecord, 'title'> = {
+      id: window.crypto.randomUUID(),
       videoId: currentVideo.id,
-      title: currentVideo.title,
       intention,
       focusMinutes: Math.floor((duration * 60 - secondsLeft) / 60),
       distractions,
       questions: messages.length,
       completedAt: new Date().toISOString(),
     };
-    const saved = window.localStorage.getItem('teach-me-sessions');
-    const sessions = saved ? JSON.parse(saved) as SessionRecord[] : [];
-    window.localStorage.setItem('teach-me-sessions', JSON.stringify([record, ...sessions]));
-    router.push(`/session-report/${record.id}`);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('Your sign-in has expired. Please sign in again before saving this session.');
+      await saveCompletedSession(user.id, record, duration, duration * 60 - secondsLeft, messages);
+      router.push(`/session-report/${record.id}`);
+    } catch (saveError) {
+      setSaveError(getErrorMessage(saveError));
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function markDistracted() {
@@ -124,7 +125,8 @@ export default function StudySessionPage() {
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#edf1ed]"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.max(0, ((duration * 60 - secondsLeft) / (duration * 60)) * 100))}%` }} /></div>
           </section>
 
-          <div className="flex items-center justify-between rounded-xl border border-[#e8ece8] bg-white px-4 py-3"><p className="text-xs text-secondaryText">When you’re ready, you can wrap up this session.</p><button onClick={finishSession} className="whitespace-nowrap rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#2e6654]">Finish session</button></div>
+          <div className="flex items-center justify-between rounded-xl border border-[#e8ece8] bg-white px-4 py-3"><p className="text-xs text-secondaryText">When you’re ready, you can wrap up this session.</p><button onClick={() => void finishSession()} disabled={isSaving} className="whitespace-nowrap rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#2e6654] disabled:opacity-50">{isSaving ? 'Saving…' : 'Finish session'}</button></div>
+          {saveError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{saveError}</p>}
         </div>
 
         <aside className="overflow-hidden rounded-2xl border border-[#e4eae5] bg-white">
@@ -140,7 +142,7 @@ export default function StudySessionPage() {
               <input id="teach-me-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this lesson..." className="min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-[#a3aca6]" />
               <button type="submit" aria-label="Send question" disabled={!question.trim()} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-white disabled:opacity-40"><Icon name="send" size={15} /></button>
             </form>
-            <p className="mt-2 text-[9px] leading-4 text-[#929b95]">Demo only. Your messages stay in this browser session.</p>
+            <p className="mt-2 text-[9px] leading-4 text-[#929b95]">Demo responses. Questions and replies are saved with your session.</p>
           </div>
         </aside>
       </div>

@@ -9,17 +9,8 @@ import { INTERESTS } from '@/lib/constants';
 import { VIDEOS } from '@/lib/constants/videos';
 import type { Video } from '@/lib/types';
 import type { IconName } from '@/components/ui/Icon';
-
-type SessionRecord = {
-  id: string;
-  videoId: string;
-  title: string;
-  intention: string;
-  focusMinutes: number;
-  distractions: number;
-  questions: number;
-  completedAt: string;
-};
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { getCompletedSessions, getErrorMessage, type SessionRecord } from '@/lib/supabase/learning';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -46,16 +37,39 @@ export default function DashboardPage() {
   const [name, setName] = useState('Learner');
   const [interests, setInterests] = useState<string[]>([]);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const storedName = window.localStorage.getItem('teach-me-name');
-    if (storedName) setName(storedName.split(' ')[0]);
+    async function loadDashboard() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) return;
 
-    const storedInterests = window.localStorage.getItem('teach-me-interests');
-    if (storedInterests) setInterests(JSON.parse(storedInterests) as string[]);
+        const [{ data: profile, error: profileError }, { data: selections, error: selectionsError }, { data: topics, error: topicsError }, loadedSessions] = await Promise.all([
+          supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
+          supabase.from('user_topics').select('topic_id').eq('user_id', user.id),
+          supabase.from('topics').select('id, name'),
+          getCompletedSessions(user.id),
+        ]);
+        if (profileError) throw profileError;
+        if (selectionsError) throw selectionsError;
+        if (topicsError) throw topicsError;
 
-    const storedSessions = window.localStorage.getItem('teach-me-sessions');
-    if (storedSessions) setSessions(JSON.parse(storedSessions) as SessionRecord[]);
+        const fullName = profile?.full_name || user.user_metadata.full_name || user.email?.split('@')[0] || 'Learner';
+        const topicNames = new Map((topics ?? []).map((topic) => [topic.id, topic.name]));
+        setName(String(fullName).split(' ')[0]);
+        setInterests((selections ?? []).flatMap((selection) => {
+          const topicName = topicNames.get(selection.topic_id);
+          return topicName ? [topicName] : [];
+        }));
+        setSessions(loadedSessions);
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+      }
+    }
+    void loadDashboard();
   }, []);
 
   const recommendations = useMemo(() => {
@@ -87,6 +101,7 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
+      {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{error}</p>}
       <div className="dashboard-grid">
         <div className="dashboard-main-column">
           <div className="dashboard-heading">
