@@ -14,13 +14,6 @@ function formatTime(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function demoAnswer(question: string, skill: string) {
-  const normalized = question.toLowerCase();
-  if (normalized.includes('example')) return `A useful way to practice ${skill.toLowerCase()} is to choose one small, familiar problem and try the idea on it. What’s one you could test after this lesson?`;
-  if (normalized.includes('why')) return `The key idea is to make the goal clear before choosing a technique. In this lesson, look for how each step connects back to ${skill.toLowerCase()}.`;
-  return `Good question. As you watch, connect it to the lesson’s main skill: ${skill.toLowerCase()}. Try pausing after the next example and putting the idea into your own words.`;
-}
-
 export default function StudySessionPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -35,6 +28,7 @@ export default function StudySessionPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [saveError, setSaveError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAsking, setIsAsking] = useState(false);
 
   useEffect(() => {
     if (!video) {
@@ -56,12 +50,42 @@ export default function StudySessionPage() {
   if (!video) return null;
   const currentVideo = video;
 
-  function submitQuestion(event: FormEvent<HTMLFormElement>) {
+  async function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = question.trim();
-    if (!trimmed) return;
-    setMessages((current) => [...current, { question: trimmed, answer: demoAnswer(trimmed, currentVideo.skill) }]);
-    setQuestion('');
+    if (!trimmed || isAsking) return;
+    setSaveError('');
+    setIsAsking(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (authError) throw authError;
+      if (!session) throw new Error('Your sign-in has expired. Please sign in again to ask the tutor.');
+
+      const history = messages.flatMap((message) => [
+        { role: 'user' as const, content: message.question },
+        { role: 'assistant' as const, content: message.answer },
+      ]).slice(-10);
+      const response = await fetch('/api/ai-tutor', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${session.access_token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ videoId: currentVideo.id, question: trimmed, history }),
+      });
+      const result = await response.json() as { answer?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || 'The tutor could not answer. Please try again.');
+      const answer = result.answer;
+      if (!answer) throw new Error('The tutor returned an empty answer. Please try again.');
+
+      setMessages((current) => [...current, { question: trimmed, answer }]);
+      setQuestion('');
+    } catch (askError) {
+      setSaveError(getErrorMessage(askError));
+    } finally {
+      setIsAsking(false);
+    }
   }
 
   async function finishSession() {
@@ -133,16 +157,17 @@ export default function StudySessionPage() {
           <div className="flex items-center justify-between border-b border-[#edf0ed] px-4 py-4"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[#edf4ff] text-primary"><Icon name="sparkle" size={16} /></span><div><h2 className="text-sm font-semibold">Ask Teach Me</h2><p className="text-[10px] text-secondaryText">A little help as you learn</p></div></div><span className="rounded-full bg-[#f2f3f1] px-2 py-1 text-[9px] font-medium text-[#7a857e]">DEMO</span></div>
           <div className="chat-scroll flex min-h-[260px] max-h-[440px] flex-col gap-3 overflow-y-auto p-4">
             <div className="max-w-[92%] rounded-xl rounded-tl-sm bg-[#f3f6f3] p-3"><p className="text-xs leading-5 text-[#536158]">Hi! I can help you think through this lesson. What would you like to understand better?</p><p className="mt-2 text-[9px] text-[#929b95]">Demo response · not connected to an AI service</p></div>
-            {messages.map((message, index) => <div key={`${message.question}-${index}`} className="space-y-2"><p className="ml-auto max-w-[92%] rounded-xl rounded-tr-sm bg-primary p-3 text-xs leading-5 text-white">{message.question}</p><div className="max-w-[92%] rounded-xl rounded-tl-sm bg-[#f3f6f3] p-3"><p className="text-xs leading-5 text-[#536158]">{message.answer}</p><p className="mt-2 text-[9px] text-[#929b95]">Demo response · based on {video.skill}</p></div></div>)}
+            {messages.map((message, index) => <div key={`${message.question}-${index}`} className="space-y-2"><p className="ml-auto max-w-[92%] rounded-xl rounded-tr-sm bg-primary p-3 text-xs leading-5 text-white">{message.question}</p><div className="max-w-[92%] rounded-xl rounded-tl-sm bg-[#f3f6f3] p-3"><p className="text-xs leading-5 text-[#536158]">{message.answer}</p><p className="mt-2 text-[9px] text-[#929b95]">AI response · lesson metadata context</p></div></div>)}
           </div>
           <div className="border-t border-[#edf0ed] p-4">
             <div className="mb-3 flex flex-wrap gap-1.5">{['Give me an example', 'Why does this matter?'].map((prompt) => <button key={prompt} onClick={() => setQuestion(prompt)} className="rounded-full border border-[#e5eae5] px-2.5 py-1.5 text-[10px] text-[#647168] hover:border-[#a9c4b0]">{prompt}</button>)}</div>
-            <form onSubmit={submitQuestion} className="flex items-center gap-2 rounded-xl border border-[#e2e8e3] bg-white p-1.5 focus-within:border-[#8eae98]">
+            <form onSubmit={(event) => void submitQuestion(event)} className="flex items-center gap-2 rounded-xl border border-[#e2e8e3] bg-white p-1.5 focus-within:border-[#8eae98]">
               <label className="sr-only" htmlFor="teach-me-question">Ask a question about this lesson</label>
-              <input id="teach-me-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this lesson..." className="min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-[#a3aca6]" />
-              <button type="submit" aria-label="Send question" disabled={!question.trim()} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-white disabled:opacity-40"><Icon name="send" size={15} /></button>
+              <input id="teach-me-question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={2000} placeholder="Ask about this lesson..." className="min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-[#a3aca6]" />
+              <button type="submit" aria-label="Send question" disabled={!question.trim() || isAsking} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-white disabled:opacity-40"><Icon name="send" size={15} /></button>
             </form>
-            <p className="mt-2 text-[9px] leading-4 text-[#929b95]">Demo responses. Questions and replies are saved with your session.</p>
+            <p className="mt-2 text-[9px] leading-4 text-[#929b95]" aria-live="polite">{isAsking ? 'The AI tutor is thinking…' : 'AI answers use lesson metadata; no transcript is connected yet.'}</p>
+            {saveError && <p role="alert" className="mt-2 text-xs text-error">{saveError}</p>}
           </div>
         </aside>
       </div>
