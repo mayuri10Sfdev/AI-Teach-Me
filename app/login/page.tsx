@@ -25,7 +25,7 @@ export default function LoginPage() {
             <Link href="/" className="brand-lockup mx-auto"><span className="brand-mark"><Icon name="sparkle" size={18} /></span><span>teach<span className="brand-accent">me</span></span></Link>
           </div>
           <LoginForm />
-          <p className="mt-6 text-center text-xs leading-5 text-secondaryText">By continuing, you agree to learn at your own pace. This prototype stores your demo profile in this browser only.</p>
+          <p className="mt-6 text-center text-xs leading-5 text-secondaryText">By continuing, you agree to learn at your own pace. Your account and learning profile are securely stored with Supabase.</p>
         </div>
       </section>
     </main>
